@@ -1,107 +1,44 @@
-#include <WiFi.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-
-// Replace with your network credentials
-const char* ssid = "...................";
-const char* password = "......................";
-
-#define POT_PIN 34
-#define LED_PIN 32
-
-AsyncWebServer server(80);
-AsyncWebSocket ws("/ws");
-
-String potValue = "0";
-
-// HTML + JavaScript 
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-  <title>ESP32 Real-Time Dashboard</title>
-  <style>
-    body { font-family: Arial; text-align: center; margin-top: 50px; }
-    button { padding: 10px 20px; font-size: 16px; }
-  </style>
-</head>
-<body>
-
-<h2>ESP32 Real-Time Dashboard</h2>
-
-<p>Potentiometer Value:</p>
-<h1 id="pot">0</h1>
-
-<button onclick="toggleLED()">Toggle LED</button>
-
-<script>
-let ws = new WebSocket(`ws://${location.host}/ws`);
-
-ws.onmessage = (event) => {
-  document.getElementById("pot").innerHTML = event.data;
-};
-
-function toggleLED() {
-  ws.send("toggle");
-}
-</script>
-
-</body>
-</html>
-)rawliteral";
-
-// Handle WebSocket events
-void onWebSocketEvent(AsyncWebSocket *server,
-                      AsyncWebSocketClient *client,
-                      AwsEventType type,
-                      void *arg,
-                      uint8_t *data,
-                      size_t len) {
-
-  if (type == WS_EVT_DATA) {
-    String msg = "";
-    for (int i = 0; i < len; i++) {
-      msg += (char)data[i];
-    }
-
-    if (msg == "toggle") {
-      digitalWrite(LED_PIN, !digitalRead(LED_PIN));
-    }
-  }
-}
-
-void setup() {
-  Serial.begin(115200);
-
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
-
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("\nWiFi connected");
-  Serial.print("ESP32 IP: ");
-  Serial.println(WiFi.localIP());
-
-  ws.onEvent(onWebSocketEvent);
-  server.addHandler(&ws);
-
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send_P(200, "text/html", index_html);
-  });
-
-  server.begin();
-}
-
-void loop() {
-  int pot = analogRead(POT_PIN);
-  potValue = String(pot);
-
-  ws.textAll(potValue);   // Push value instantly to browser
-  delay(100);
+// Deep Sleep Example - External Wake-up 
+#include "driver/rtc_io.h"
+#define BUTTON_PIN 33 // GPIO33 สำหรับปุ่มกด 
+RTC_DATA_ATTR int bootCount = 0; // เก็บค่าใน RTC Memory 
+void print_wakeup_reason() { 
+  esp_sleep_wakeup_cause_t wakeup_reason; 
+  wakeup_reason = esp_sleep_get_wakeup_cause(); 
+  switch(wakeup_reason) { 
+    case ESP_SLEEP_WAKEUP_EXT0: 
+      Serial.println("Wakeup caused by external signal using RTC_IO"); 
+      break; 
+    case ESP_SLEEP_WAKEUP_TIMER: 
+      Serial.println("Wakeup caused by timer"); 
+      break; 
+    default: 
+      Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason); 
+      break; 
+  } 
+} 
+void setup() { 
+  Serial.begin(115200); 
+  delay(1000); 
+  // เพิ่ม Boot Count 
+  ++bootCount; 
+  Serial.println("Boot number: " + String(bootCount)); 
+  // แสดงสาเหตุที่ตื่น 
+  print_wakeup_reason(); 
+  // ตั้งค่า Wake-up Sources 
+  // 1. Timer Wake-up (60 วินาที) 
+  esp_sleep_enable_timer_wakeup(60 * 1000000); 
+  // 2. External Wake-up (ปุ่มกด) 
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_33, 1); // 1 = HIGH, 0 = LOW 
+  // ทำงานที่ต้องการ 
+  Serial.println("Doing some work..."); 
+  int sensorValue = analogRead(34); 
+  Serial.println("Sensor: " + String(sensorValue)); 
+  // เข้า Deep Sleep 
+  Serial.println("Going to Deep Sleep..."); 
+  delay(100); 
+  esp_deep_sleep_start(); 
+} 
+void loop() { 
+  // ไม่ทำงาน 
 }
